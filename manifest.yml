@@ -5,3 +5,5 @@ applications:
   path: attendee-viewer.jar
   instances: 1
   buildpack: java_buildpack
+  services:
+    - config-service

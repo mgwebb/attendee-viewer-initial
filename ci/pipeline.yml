@@ -1,0 +1,96 @@
+---
+
+resources:
+
+- name: app
+  type: git
+  source:
+    uri: {{github_app_repo_uri}}
+    branch: {{github_app_repo_branch}}
+    username: {{github_username}}
+    password: {{github_password}}
+
+- name: pipelines
+  type: git
+  source:
+    uri: {{github_pipelines_repo_uri}}
+    branch: {{github_pipelines_repo_branch}}
+    username: {{github_username}}
+    password: {{github_password}}
+
+- name: version
+  type: semver
+  source:
+    driver: s3
+    bucket: {{version_bucket}}
+    key: {{version_key}}
+    access_key_id: {{version_access_key}}
+    secret_access_key: {{version_secret_key}}
+    initial_version: {{initial_version}}
+    region_name: {{version_bucket_region_name}}
+
+- name: artifact
+  type: s3
+  source:
+    regexp: {{artifact_regexp}}
+    bucket: {{artifact_bucket}}
+    access_key_id: {{artifact_access_key}}
+    secret_access_key: {{artifact_secret_key}}
+    region_name: {{artifact_bucket_region_name}}
+
+jobs:
+
+- name: build
+  serial_groups: [version]
+  plan:
+  - aggregate:
+    - get: app
+      trigger: true
+    - get: version
+      params: {pre: rc}
+    - get: pipelines
+  - task: build
+    file: {{build_task}}
+    params:
+      APP_NAME: {{app_name}}
+      JAR_NAME: {{jar_name}}
+  - put: artifact
+    params:
+      file: build/*
+  - put: version
+    params: {file: version/number}
+
+- name: deploy-dev
+  plan:
+  - aggregate:
+    - get: artifact
+      passed: [build]
+      trigger: true
+    - get: app
+    - get: version
+      passed: [build]
+    - get: pipelines
+  - task: blue-green-deploy
+    file: {{deploy_dev_task}}
+    params:
+      CF_APP_NAME: {{app_name}}
+      CF_HOSTNAME: {{cf_dev_hostname}}
+      CF_API: {{cf_dev_api}}
+      CF_USERNAME: {{cf_dev_username}}
+      CF_PASSWORD: {{cf_dev_password}}
+      CF_ORGANIZATION: {{cf_dev_organization}}
+      CF_SPACE: {{cf_dev_space}}
+      CF_MANIFEST: {{cf_dev_manifest}}
+      CF_DOMAIN: {{cf_dev_domain}}
+
+- name: major
+  serial_groups: [version]
+  plan:
+  - put: version
+    params: {bump: major}
+
+- name: minor
+  serial_groups: [version]
+  plan:
+  - put: version
+    params: {bump: minor}

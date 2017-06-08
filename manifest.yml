@@ -1,7 +1,7 @@
 ---
 applications:
 - name: attendee-viewer
-  memory: 512M
+  memory: 1G
   path: attendee-viewer.jar
   instances: 1
   buildpack: java_buildpack
